@@ -1,0 +1,73 @@
+# HP LaserJet 1010 -> ESP32-S3 raw TCP-9100 print server
+#
+# Board: Espressif ESP32-S3-DevKitC-1-N16R8V (16 MB Flash Quad, 8 MB PSRAM Octal)
+#
+# The printer is a host-based HP LaserJet 1010 (USB only, no network port).
+# The client driver renders the job and sends the ready-to-print PCL XL stream
+# to TCP port 9100; this component forwards it verbatim to the printer's USB
+# bulk OUT endpoint.
+#
+# Copy secrets.yaml.example to secrets.yaml and fill in your own values.
+
+esphome:
+  name: hp1010-printserver
+  friendly_name: HP1010 Print Server
+  comment: ESP32-S3 USB-host raw-9100 bridge for the HP LaserJet 1010
+  platformio_options:
+    build_flags:
+      - -DCONFIG_USB_HOST_CONTROL_TRANSFER_MAX_SIZE=1024
+      - -DCONFIG_USB_HOST_HW_BUFFER_BIAS_BALANCED=1
+
+esp32:
+  variant: esp32s3
+  framework:
+    type: esp-idf
+    sdkconfig_options:
+      CONFIG_USB_HOST_HW_BUFFER_BIAS_BALANCED: "y"
+
+psram:
+  mode: octal
+  speed: 80MHz
+
+logger:
+  hardware_uart: UART0
+  level: INFO
+
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  ap:
+    ssid: !secret ap_ssid
+    password: !secret ap_password
+
+captive_portal:
+
+web_server:
+  port: 80
+  version: 3
+
+external_components:
+  - source:
+      type: local
+      path: external_components
+
+usb_host:
+  max_transfer_requests: 32
+
+hp1010_printserver:
+  id: prn
+  port: 9100
+  vid: 0x03F0
+  pid: 0x0C17
+
+binary_sensor:
+  - platform: template
+    name: "HP1010 Printer Ready"
+    lambda: 'return id(prn).is_ready();'
