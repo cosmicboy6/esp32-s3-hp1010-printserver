@@ -16,16 +16,16 @@ suitable driver) can print to it over WiFi.
 
 ### Prebuilt firmware (browser, no build required)
 
-A ready-to-flash **factory image** lives in [`docs/`](docs/) and is also attached to
-the [GitHub Releases](https://github.com/cosmicboy6/esp32-s3-hp1010-printserver/releases).
+A ready-to-flash **factory image** (`firmware.factory.bin`) is committed to the repo
+root and attached to the [GitHub Releases](https://github.com/cosmicboy6/esp32-s3-hp1010-printserver/releases).
 
 Connect a blank ESP32-S3 over USB and open the installer page:
 
-> **https://raw.githack.com/cosmicboy6/esp32-s3-hp1010-printserver/main/docs/index.html**
+> **https://cosmicboy6.github.io/esp32-s3-hp1010-printserver/**
 
-(If GitHub Pages is enabled for this repo — **Settings → Pages → Deploy from a branch →
-`main` / `/docs`** — the same page is served at
-`https://cosmicboy6.github.io/esp32-s3-hp1010-printserver/`.)
+It uses [ESP Web Tools](https://esphome.github.io/esp-web-tools/) (Web Serial), so
+the browser flashes the board directly — nothing is uploaded. (Always-available
+mirror: `https://raw.githack.com/cosmicboy6/esp32-s3-hp1010-printserver/main/index.html`.)
 
 It uses [ESP Web Tools](https://esphome.github.io/esp-web-tools/) (Web Serial), so
 the browser flashes the board directly — nothing is uploaded. (Prefer GitHub Pages?
@@ -96,9 +96,9 @@ same thing the CUPS `usb-libusb` backend does.
 ```
 hp1010-printserver.yaml                              ESPHome device config
 secrets.yaml.example                                 copy to secrets.yaml
-docs/index.html                                      browser installer (ESP Web Tools)
-docs/manifest.json                                   installer manifest
-docs/firmware.factory.bin                            prebuilt merged image (no secrets)
+index.html                                           browser installer (ESP Web Tools)
+manifest.json                                        installer manifest
+firmware.factory.bin                                 prebuilt merged image (no secrets)
 external_components/hp1010_printserver/__init__.py   component registration
 external_components/hp1010_printserver/hp1010_printserver.h
 external_components/hp1010_printserver/hp1010_printserver.cpp
