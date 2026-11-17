@@ -23,6 +23,10 @@ Connect a blank ESP32-S3 over USB and open the installer page:
 
 > **https://raw.githack.com/cosmicboy6/esp32-s3-hp1010-printserver/main/docs/index.html**
 
+(If GitHub Pages is enabled for this repo — **Settings → Pages → Deploy from a branch →
+`main` / `/docs`** — the same page is served at
+`https://cosmicboy6.github.io/esp32-s3-hp1010-printserver/`.)
+
 It uses [ESP Web Tools](https://esphome.github.io/esp-web-tools/) (Web Serial), so
 the browser flashes the board directly — nothing is uploaded. (Prefer GitHub Pages?
 Serve [`docs/`](docs/) as the Pages source and the page works the same.)
