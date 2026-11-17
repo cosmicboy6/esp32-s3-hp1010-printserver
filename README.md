@@ -24,12 +24,9 @@ Connect a blank ESP32-S3 over USB and open the installer page:
 > **https://cosmicboy6.github.io/esp32-s3-hp1010-printserver/**
 
 It uses [ESP Web Tools](https://esphome.github.io/esp-web-tools/) (Web Serial), so
-the browser flashes the board directly — nothing is uploaded. (Always-available
-mirror: `https://raw.githack.com/cosmicboy6/esp32-s3-hp1010-printserver/main/index.html`.)
-
-It uses [ESP Web Tools](https://esphome.github.io/esp-web-tools/) (Web Serial), so
-the browser flashes the board directly — nothing is uploaded. (Prefer GitHub Pages?
-Serve [`docs/`](docs/) as the Pages source and the page works the same.)
+the browser flashes the board directly — nothing is uploaded. The installer is
+served straight from this repo's root via GitHub Pages; an always-available
+mirror is `https://raw.githack.com/cosmicboy6/esp32-s3-hp1010-printserver/main/index.html`.
 
 **Or flash it from the command line** — the merged image goes at offset `0x0`:
 
@@ -83,6 +80,14 @@ same thing the CUPS `usb-libusb` backend does.
 - The printer's USB Printer Class `GET_PORT_STATUS` is polled every 15 s. The
   status byte drives the `HP1010 Paper Out`, `HP1010 Error` and `HP1010 Online`
   binary sensors plus the `HP1010 Raw Status` diagnostic sensor in Home Assistant.
+- **Lifetime page count via PJL.** A `@PJL INFO PAGECOUNT` query (bracketed in
+  UEL, `ESC%-12345X`) is injected into the same bulk-OUT pipeline used for print
+  data, and the reply (`@PJL INFO PAGECOUNT\r\n<digits>\r\n`) is parsed from the
+  drained bulk-IN channel. The query is only sent while the pipe is genuinely
+  idle (no client connected, nothing queued or in flight), so a PJL command can
+  never be interleaved into a print job. It is refreshed shortly after each job
+  and at least every 5 minutes. The LJ1010 formatter answers `INFO PAGECOUNT`,
+  `INFO ID`, `INFO STATUS` and `INFO CONFIG`.
 
 ## Hardware
 
@@ -141,7 +146,8 @@ rendering itself.
 
 ## Home Assistant entities
 
-The component exposes the printer's IEEE-1284 status byte (polled every 15 s) as:
+The component exposes the printer's IEEE-1284 status byte (polled every 15 s),
+the lifetime page counter (read over PJL), and a set of ESP32 diagnostics:
 
 | Entity | Meaning |
 |---|---|
@@ -149,7 +155,17 @@ The component exposes the printer's IEEE-1284 status byte (polled every 15 s) as
 | `binary_sensor.hp1010_paper_out` | Tray empty (status bit 5) |
 | `binary_sensor.hp1010_error` | Error / needs attention (status bit 3 clear) |
 | `binary_sensor.hp1010_online` | Selected / online (status bit 4) |
-| `sensor.hp1010_raw_status` | Raw status byte, diagnostic |
+| `sensor.hp1010_raw_status` | Raw IEEE-1284 status byte (diagnostic) |
+| `sensor.hp1010_page_count` | Lifetime printed pages, `@PJL INFO PAGECOUNT` (diagnostic) |
+| `sensor.hp1010_uptime` | Device uptime (diagnostic) |
+| `sensor.hp1010_wifi_signal` | WiFi RSSI (diagnostic) |
+| `sensor.hp1010_free_heap` | Free heap (diagnostic) |
+| `sensor.hp1010_max_free_block` | Largest free heap block (diagnostic) |
+| `sensor.hp1010_heap_fragmentation` | Heap fragmentation (diagnostic) |
+| `sensor.hp1010_loop_time` | Main-loop iteration time (diagnostic) |
+| `text_sensor.hp1010_firmware_version` | Running firmware version |
+| `text_sensor.hp1010_wifi_ssid` / `_bssid` | Connected WiFi network |
+| `text_sensor.hp1010_mac_address` / `_ip_address` | Device network identity |
 
 ## Limitations
 

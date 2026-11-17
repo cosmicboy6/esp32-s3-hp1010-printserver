@@ -26,6 +26,12 @@ static constexpr uint8_t HP_DESC_ENDPOINT = 0x05;
 static constexpr uint8_t HP_XFER_TYPE_MASK = 0x03;
 static constexpr uint8_t HP_XFER_TYPE_BULK = 0x02;
 
+// PJL (Printer Job Language) page-count query. The leading/trailing UEL
+// (universal exit language, ESC%-12345X) brackets the command so it is parsed
+// as a PJL job rather than as print data. The printer answers on the bulk IN
+// back-channel with "@PJL INFO PAGECOUNT\r\n<digits>\r\n\x0c".
+static constexpr const char *PJL_PAGECOUNT_QUERY = "\x1b%-12345X@PJL INFO PAGECOUNT\r\n\x1b%-12345X";
+
 void HP1010PrintServer::loop() {
   if (!this->tcp_started_) {
     this->tcp_started_ = true;
@@ -61,6 +67,18 @@ void HP1010PrintServer::setup() {
   // Poll the printer's USB Printer Class status so a stalled, deselected, or
   // out-of-paper printer is visible; a raw 9100 bridge otherwise never notices.
   this->set_interval("printer_status", 15000, [this]() { this->printer_class_port_status_(); });
+
+  // Refresh the PJL page count shortly after each job (the TCP task raises
+  // page_count_refresh_) and at least every 5 minutes. Runs from the main loop
+  // because set_timeout() inside query_page_count_() is not task-safe.
+  this->set_interval("page_count", 10000, [this]() {
+    const bool requested = this->page_count_refresh_.load(std::memory_order_acquire);
+    const uint32_t now = millis();
+    if ((requested || now - this->last_page_count_query_ > 300000) && this->query_page_count_()) {
+      this->page_count_refresh_.store(false, std::memory_order_release);
+      this->last_page_count_query_ = now;
+    }
+  });
 }
 
 void HP1010PrintServer::dump_config() {
@@ -75,6 +93,8 @@ void HP1010PrintServer::dump_config() {
       ESP_LOGCONFIG(TAG, "  Port status: 0x%02X (PaperEmpty=%u Select=%u NotError=%u)", this->printer_status(),
                     (this->printer_status() >> 5) & 0x01, (this->printer_status() >> 4) & 0x01,
                     (this->printer_status() >> 3) & 0x01);
+    if (this->has_page_count())
+      ESP_LOGCONFIG(TAG, "  Page count: %u", this->page_count());
   } else {
     ESP_LOGCONFIG(TAG, "  Printer: not connected");
   }
@@ -197,11 +217,92 @@ void HP1010PrintServer::printer_class_port_status_() {
   }
 }
 
+// Ask the printer for its lifetime page count with a PJL INFO PAGECOUNT query.
+// The command is injected into the normal bulk-OUT print pipeline (the same
+// chunk queue and transfer path used for print data) and the reply is captured
+// by the bulk IN drain. Reusing the proven print path avoids a second, raw
+// usb_host_transfer_alloc()/submit() consumer on the same endpoint, which
+// wedged the USB host task and tripped the Task WDT.
+//
+// Safety: a PJL command injected into a print stream would be parsed as part of
+// the job, so this only queues while the pipe is genuinely idle (no client, no
+// queued/in-flight chunks). out_mutex_ makes the idle test and the queue push
+// atomic with respect to start_output_().
+bool HP1010PrintServer::query_page_count_() {
+  if (!this->is_ready() || this->pjl_waiting_.load(std::memory_order_acquire))
+    return false;
+
+  if (xSemaphoreTake(this->out_mutex_, pdMS_TO_TICKS(100)) != pdTRUE)
+    return false;
+
+  bool queued = false;
+  const bool idle = !this->client_active_.load(std::memory_order_acquire) &&
+                    this->inflight_.load(std::memory_order_acquire) == 0 &&
+                    uxQueueMessagesWaiting(this->ready_queue_) == 0;
+
+  if (idle) {
+    Chunk *chunk = nullptr;
+    if (xQueueReceive(this->free_queue_, &chunk, 0) == pdTRUE && chunk != nullptr) {
+      const size_t len = strlen(PJL_PAGECOUNT_QUERY);
+      if (len <= CHUNK_SIZE) {
+        memcpy(chunk->data, PJL_PAGECOUNT_QUERY, len);
+        chunk->len = len;
+        this->pjl_len_ = 0;
+        this->pjl_waiting_.store(true, std::memory_order_release);
+        if (xQueueSend(this->ready_queue_, &chunk, 0) == pdTRUE) {
+          queued = true;
+          ESP_LOGD(TAG, "PJL page-count query queued (%u bytes)", static_cast<unsigned>(len));
+          // Give up if the printer never answers, so the next query can run.
+          this->set_timeout("pjl_timeout", 3000, [this]() {
+            this->pjl_waiting_.store(false, std::memory_order_release);
+          });
+        } else {
+          xQueueSend(this->free_queue_, &chunk, 0);
+          this->pjl_waiting_.store(false, std::memory_order_release);
+        }
+      } else {
+        xQueueSend(this->free_queue_, &chunk, 0);
+      }
+    }
+  }
+
+  xSemaphoreGive(this->out_mutex_);
+  if (queued)
+    this->start_output_();
+  return queued;
+}
+
+// Called from the bulk IN drain when a PJL reply is being collected. The LJ1010
+// answers with the value on the line after the command name:
+//   "@PJL INFO PAGECOUNT\r\n44032\r\n\x0c"
+// so skip past "PAGECOUNT" to the first run of digits.
+void HP1010PrintServer::parse_pjl_page_count_() {
+  char *p = strstr(this->pjl_buffer_, "PAGECOUNT");
+  if (p == nullptr)
+    return;
+  p += strlen("PAGECOUNT");
+  while (*p != '\0' && (*p < '0' || *p > '9'))
+    p++;
+  if (*p < '0' || *p > '9')
+    return;
+  uint32_t value = 0;
+  while (*p >= '0' && *p <= '9') {
+    value = value * 10 + static_cast<uint32_t>(*p - '0');
+    p++;
+  }
+  this->page_count_.store(value, std::memory_order_release);
+  this->has_page_count_.store(true, std::memory_order_release);
+  this->pjl_waiting_.store(false, std::memory_order_release);
+  ESP_LOGI(TAG, "Printer page count: %u", value);
+}
+
 void HP1010PrintServer::on_connected() {
   this->claimed_.store(false);
   this->iface_.store(0);
   this->ep_out_.store(0);
   this->ep_in_.store(0);
+  this->pjl_waiting_.store(false, std::memory_order_release);
+  this->pjl_len_ = 0;
 
   if (!this->find_printer_interface_()) {
     ESP_LOGW(TAG, "Device is not a usable USB printer");
@@ -253,12 +354,20 @@ void HP1010PrintServer::on_connected() {
     if (this->is_ready())
       this->printer_class_port_status_();
   });
+
+  // Read the page count once the interface has settled.
+  this->set_timeout("page_count_first", 4000, [this]() {
+    if (this->is_ready() && this->query_page_count_())
+      this->last_page_count_query_ = millis();
+  });
 }
 
 void HP1010PrintServer::on_disconnected() {
   this->printer_ready_.store(false, std::memory_order_release);
   this->status_inflight_.store(false, std::memory_order_release);
   this->has_status_.store(false, std::memory_order_release);
+  this->pjl_waiting_.store(false, std::memory_order_release);
+  this->pjl_len_ = 0;
   this->generation_.fetch_add(1, std::memory_order_acq_rel);
 
   // The TCP task notices the generation change on its next recv() timeout or
@@ -389,6 +498,22 @@ void HP1010PrintServer::start_input_() {
         if (!this->is_ready())
           return;  // disconnected; don't restart
         if (status.success && status.data_len > 0) {
+          // While a PJL query is outstanding, collect the back-channel bytes so
+          // the page count can be parsed out of them.
+          if (this->pjl_waiting_.load(std::memory_order_acquire)) {
+            const size_t room = sizeof(this->pjl_buffer_) - 1 - this->pjl_len_;
+            const size_t n = status.data_len < room ? status.data_len : room;
+            if (n > 0) {
+              memcpy(this->pjl_buffer_ + this->pjl_len_, status.data, n);
+              this->pjl_len_ += n;
+              this->pjl_buffer_[this->pjl_len_] = '\0';
+              ESP_LOGD(TAG, "PJL reply (%u bytes): %s", static_cast<unsigned>(this->pjl_len_), this->pjl_buffer_);
+              // A form feed terminates a PJL response.
+              if (memchr(this->pjl_buffer_, 0x0C, this->pjl_len_) != nullptr)
+                this->pjl_waiting_.store(false, std::memory_order_release);
+              this->parse_pjl_page_count_();
+            }
+          }
           char buf[128];
           size_t pos = 0;
           for (size_t i = 0; i < status.data_len && pos < sizeof(buf) - 4; i++)
@@ -456,6 +581,10 @@ void HP1010PrintServer::handle_client_(int fd) {
     return;
   }
 
+  // Blocks the PJL page-count query for the duration of the job so no PJL
+  // command is ever interleaved into the print stream.
+  this->client_active_.store(true, std::memory_order_release);
+
   int nodelay = 1;
   setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &nodelay, sizeof(nodelay));
   struct timeval timeout {};
@@ -506,6 +635,10 @@ void HP1010PrintServer::handle_client_(int fd) {
   const bool drain_timeout = (uxQueueMessagesWaiting(this->ready_queue_) > 0 || this->inflight_.load(std::memory_order_acquire) > 0);
   ESP_LOGI(TAG, "Job done: received %u bytes over TCP, forwarded %u bytes to USB%s", static_cast<unsigned>(recv_total),
            static_cast<unsigned>(this->out_bytes_.load(std::memory_order_relaxed)), drain_timeout ? " (DRAIN TIMEOUT)" : "");
+
+  this->client_active_.store(false, std::memory_order_release);
+  // Ask the main loop to re-read the page count now that the pipe is idle.
+  this->page_count_refresh_.store(true, std::memory_order_release);
 }
 
 }  // namespace esphome::hp1010_printserver

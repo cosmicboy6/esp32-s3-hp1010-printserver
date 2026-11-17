@@ -47,6 +47,11 @@ class HP1010PrintServer : public usb_host::USBClient {
   /// Selected / online (status bit 4 "Select").
   bool is_online() const { return this->is_ready() && (this->printer_status() & STATUS_SELECT) != 0; }
 
+  /// Lifetime page count reported by the printer via PJL (0 until first read).
+  uint32_t page_count() const { return this->page_count_.load(std::memory_order_acquire); }
+  /// True once a page count has been read since boot.
+  bool has_page_count() const { return this->has_page_count_.load(std::memory_order_acquire); }
+
  protected:
   void on_connected() override;
   void on_disconnected() override;
@@ -78,6 +83,8 @@ class HP1010PrintServer : public usb_host::USBClient {
   bool find_printer_interface_();
   void select_alt_setting_(uint8_t alt);
   void printer_class_port_status_();
+  bool query_page_count_();
+  void parse_pjl_page_count_();
 
   static void tcp_task_entry_(void *arg);
   void tcp_task_();
@@ -96,6 +103,18 @@ class HP1010PrintServer : public usb_host::USBClient {
   std::atomic<bool> status_inflight_{false};
   std::atomic<uint8_t> printer_status_{0};
   std::atomic<bool> has_status_{false};
+  std::atomic<uint32_t> page_count_{0};
+  std::atomic<bool> has_page_count_{false};
+  // True from a PJL query submit until its reply is parsed (or it times out).
+  std::atomic<bool> pjl_waiting_{false};
+  // Set by the TCP task while a print job is being received.
+  std::atomic<bool> client_active_{false};
+  // Set by the TCP task when a job finishes, so the main loop re-reads the page
+  // count once the pipe has drained (set_timeout() is not task-safe).
+  std::atomic<bool> page_count_refresh_{false};
+  uint32_t last_page_count_query_{0};
+  char pjl_buffer_[256];
+  size_t pjl_len_{0};
   std::atomic<size_t> inflight_{0};
   std::atomic<uint32_t> generation_{0};
   std::atomic<uint32_t> out_bytes_{0};

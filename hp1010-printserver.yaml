@@ -90,3 +90,41 @@ sensor:
     accuracy_decimals: 0
     update_interval: 5s
     lambda: 'return id(prn).has_status() ? (float) id(prn).printer_status() : NAN;'
+  - platform: template
+    name: "HP1010 Page Count"
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    update_interval: 60s
+    lambda: 'return id(prn).has_page_count() ? (float) id(prn).page_count() : NAN;'
+  - platform: uptime
+    name: "HP1010 Uptime"
+    entity_category: diagnostic
+  - platform: wifi_signal
+    name: "HP1010 WiFi Signal"
+    update_interval: 60s
+    entity_category: diagnostic
+  - platform: debug
+    free:
+      name: "HP1010 Free Heap"
+    fragmentation:
+      name: "HP1010 Heap Fragmentation"
+    block:
+      name: "HP1010 Max Free Block"
+    loop_time:
+      name: "HP1010 Loop Time"
+
+text_sensor:
+  - platform: version
+    name: "HP1010 Firmware Version"
+  - platform: wifi_info
+    ip_address:
+      name: "HP1010 IP Address"
+    ssid:
+      name: "HP1010 WiFi SSID"
+    bssid:
+      name: "HP1010 WiFi BSSID"
+    mac_address:
+      name: "HP1010 MAC Address"
+
+debug:
+  update_interval: 60s
