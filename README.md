@@ -147,25 +147,27 @@ rendering itself.
 ## Home Assistant entities
 
 The component exposes the printer's IEEE-1284 status byte (polled every 15 s),
-the lifetime page counter (read over PJL), and a set of ESP32 diagnostics:
+the lifetime page counter (read over PJL), and a set of ESP32 diagnostics.
+ESPHome prefixes every entity with the device name, so the IDs are
+`sensor.hp1010_print_server_hp1010_*` / `binary_sensor.hp1010_print_server_hp1010_*`:
 
-| Entity | Meaning |
+| Entity (`hp1010_print_server_hp1010_…`) | Meaning |
 |---|---|
-| `binary_sensor.hp1010_printer_ready` | Printer enumerated, claimed and on the bidirectional alt setting |
-| `binary_sensor.hp1010_paper_out` | Tray empty (status bit 5) |
-| `binary_sensor.hp1010_error` | Error / needs attention (status bit 3 clear) |
-| `binary_sensor.hp1010_online` | Selected / online (status bit 4) |
-| `sensor.hp1010_raw_status` | Raw IEEE-1284 status byte (diagnostic) |
-| `sensor.hp1010_page_count` | Lifetime printed pages, `@PJL INFO PAGECOUNT` (diagnostic) |
-| `sensor.hp1010_uptime` | Device uptime (diagnostic) |
-| `sensor.hp1010_wifi_signal` | WiFi RSSI (diagnostic) |
-| `sensor.hp1010_free_heap` | Free heap (diagnostic) |
-| `sensor.hp1010_max_free_block` | Largest free heap block (diagnostic) |
-| `sensor.hp1010_heap_fragmentation` | Heap fragmentation (diagnostic) |
-| `sensor.hp1010_loop_time` | Main-loop iteration time (diagnostic) |
-| `text_sensor.hp1010_firmware_version` | Running firmware version |
-| `text_sensor.hp1010_wifi_ssid` / `_bssid` | Connected WiFi network |
-| `text_sensor.hp1010_mac_address` / `_ip_address` | Device network identity |
+| `binary_sensor.…_printer_ready` | Printer enumerated, claimed and on the bidirectional alt setting |
+| `binary_sensor.…_paper_out` | Tray empty (status bit 5) |
+| `binary_sensor.…_error` | Error / needs attention (status bit 3 clear) |
+| `binary_sensor.…_online` | Selected / online (status bit 4) |
+| `sensor.…_raw_status` | Raw IEEE-1284 status byte (diagnostic) |
+| `sensor.…_page_count` | Lifetime printed pages, `@PJL INFO PAGECOUNT` (diagnostic) |
+| `sensor.…_uptime` | Device uptime (diagnostic) |
+| `sensor.…_wifi_signal` | WiFi RSSI (diagnostic) |
+| `sensor.…_free_heap` | Free heap (diagnostic) |
+| `sensor.…_max_free_block` | Largest free heap block (diagnostic) |
+| `sensor.…_heap_fragmentation` | Heap fragmentation (diagnostic) |
+| `sensor.…_loop_time` | Main-loop iteration time (diagnostic) |
+| `sensor.…_firmware_version` | Running firmware version |
+| `sensor.…_wifi_ssid` / `…_wifi_bssid` | Connected WiFi network |
+| `sensor.…_mac_address` / `…_ip_address` | Device network identity |
 
 ## Limitations
 
