@@ -12,6 +12,38 @@ suitable driver) can print to it over WiFi.
  CUPS / client driver  --TCP 9100-->  ESP32-S3  --USB bulk OUT-->  HP LaserJet 1010
 ```
 
+## Install
+
+### Prebuilt firmware (browser, no build required)
+
+A ready-to-flash **factory image** lives in [`docs/`](docs/) and is also attached to
+the [GitHub Releases](https://github.com/cosmicboy6/esp32-s3-hp1010-printserver/releases).
+
+Connect a blank ESP32-S3 over USB and open the installer page:
+
+> **https://raw.githack.com/cosmicboy6/esp32-s3-hp1010-printserver/main/docs/index.html**
+
+It uses [ESP Web Tools](https://esphome.github.io/esp-web-tools/) (Web Serial), so
+the browser flashes the board directly — nothing is uploaded. (Prefer GitHub Pages?
+Serve [`docs/`](docs/) as the Pages source and the page works the same.)
+
+**Or flash it from the command line** — the merged image goes at offset `0x0`:
+
+```bash
+esptool.py --chip esp32s3 write_flash 0x0 firmware.factory.bin
+```
+
+> **No secrets inside.** The prebuilt image uses placeholder WiFi, so the device boots
+> into its fallback AP (`HP1010 Print Fallback` / `hp1010setup`); join it and set your
+> real WiFi through the captive portal at `http://192.168.4.1`. It is compiled for the
+> exact target board (**ESP32-S3 N16R8**). The baked-in API encryption key is
+> `9GXBCDmqW1uiTOdRJC60k8qvZ9W/yYW0jiE3xV/obGc=` — use it when adding the device to
+> Home Assistant, or build from source to use your own.
+
+### From source
+
+See [Build & flash](#build--flash) below.
+
 ## Why this works
 
 The LJ1010 is a *host-based* ("GDI") printer: it has **no PCL/PostScript
@@ -44,8 +76,9 @@ same thing the CUPS `usb-libusb` backend does.
   pass the in-flight check and submit out of order.
 - **The reverse (bulk IN) channel is drained** so the printer can report status
   and keeps accepting data.
-- The printer's USB Printer Class `GET_PORT_STATUS` is polled every 15 s and
-  logged (paper-empty / selected / not-error bits).
+- The printer's USB Printer Class `GET_PORT_STATUS` is polled every 15 s. The
+  status byte drives the `HP1010 Paper Out`, `HP1010 Error` and `HP1010 Online`
+  binary sensors plus the `HP1010 Raw Status` diagnostic sensor in Home Assistant.
 
 ## Hardware
 
@@ -59,6 +92,9 @@ same thing the CUPS `usb-libusb` backend does.
 ```
 hp1010-printserver.yaml                              ESPHome device config
 secrets.yaml.example                                 copy to secrets.yaml
+docs/index.html                                      browser installer (ESP Web Tools)
+docs/manifest.json                                   installer manifest
+docs/firmware.factory.bin                            prebuilt merged image (no secrets)
 external_components/hp1010_printserver/__init__.py   component registration
 external_components/hp1010_printserver/hp1010_printserver.h
 external_components/hp1010_printserver/hp1010_printserver.cpp
@@ -98,6 +134,18 @@ lpadmin -p HP1010 -E -v socket://hp1010-printserver.local:9100 -m <driver>
 The `<driver>` must be one that renders for the LJ1010 (e.g. `foo2zjs` / an HP
 LJ1010 PPD). A generic "raw" queue also works if the client driver does the
 rendering itself.
+
+## Home Assistant entities
+
+The component exposes the printer's IEEE-1284 status byte (polled every 15 s) as:
+
+| Entity | Meaning |
+|---|---|
+| `binary_sensor.hp1010_printer_ready` | Printer enumerated, claimed and on the bidirectional alt setting |
+| `binary_sensor.hp1010_paper_out` | Tray empty (status bit 5) |
+| `binary_sensor.hp1010_error` | Error / needs attention (status bit 3 clear) |
+| `binary_sensor.hp1010_online` | Selected / online (status bit 4) |
+| `sensor.hp1010_raw_status` | Raw status byte, diagnostic |
 
 ## Limitations
 

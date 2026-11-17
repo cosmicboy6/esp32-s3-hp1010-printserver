@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>HP LaserJet 1010 &rarr; ESP32-S3 Print Server &mdash; Install</title>
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    max-width: 46rem; margin: 0 auto; padding: 1.5rem 1rem 4rem;
+    line-height: 1.55;
+  }
+  h1 { font-size: 1.5rem; margin-bottom: .25rem; }
+  h2 { font-size: 1.1rem; margin-top: 2rem; }
+  code { background: rgba(127,127,127,.15); padding: .1rem .3rem; border-radius: .25rem; }
+  .muted { opacity: .75; }
+  esp-web-install-button { display: block; margin: 1.5rem 0; }
+  .note {
+    border-left: 3px solid #888; padding: .5rem .9rem; margin: 1rem 0;
+    background: rgba(127,127,127,.08); border-radius: 0 .25rem .25rem 0;
+  }
+</style>
+</head>
+<body>
+
+<h1>HP LaserJet 1010 &rarr; ESP32-S3 Print Server</h1>
+<p class="muted">Browser installer for the raw TCP-9100 &rarr; USB Printer Class bridge firmware.</p>
+
+<p>
+  Connect a <strong>blank ESP32-S3</strong> board over USB, then press <em>Install</em>.
+  The installer talks to the board directly through your browser (Web Serial) &mdash;
+  nothing is uploaded anywhere.
+</p>
+
+<esp-web-install-button manifest="manifest.json">
+  <button slot="activate">Install HP1010 Print Server</button>
+  <span slot="unsupported">Your browser doesn't support Web Serial. Use Chrome, Edge or Firefox on a desktop.</span>
+  <span slot="not-allowed">Open this page over <code>https://</code> to install.</span>
+</esp-web-install-button>
+
+<div class="note">
+  <strong>Board requirement:</strong> ESP32-S3 with <strong>16&nbsp;MB flash + 8&nbsp;MB octal PSRAM</strong>
+  (e.g. ESP32-S3-DevKitC-1&nbsp;N16R8). The prebuilt image is compiled for that exact target.
+  For any other board, build from source instead.
+</div>
+
+<h2>After flashing</h2>
+<ol>
+  <li>
+    The device boots with <em>no</em> WiFi credentials, so it starts its fallback access point:<br>
+    <strong>SSID</strong> <code>HP1010 Print Fallback</code> &nbsp;/&nbsp;
+    <strong>Password</strong> <code>hp1010setup</code>
+  </li>
+  <li>
+    Join that network, then open <a href="http://192.168.4.1">http://192.168.4.1</a>
+    (captive portal) and enter your real WiFi details.
+  </li>
+  <li>
+    Find the device on your network (mDNS <code>hp1010-printserver.local</code>) and
+    add it to Home Assistant using the API encryption key
+    <code>9GXBCDmqW1uiTOdRJC60k8qvZ9W/yYW0jiE3xV/obGc=</code>.
+  </li>
+  <li>
+    Point a raw print queue at it:<br>
+    <code>lpadmin -p HP1010 -E -v socket://hp1010-printserver.local:9100 -m &lt;LJ1010 driver&gt;</code>
+  </li>
+</ol>
+
+<div class="note">
+  This prebuilt image intentionally contains <strong>no personal secrets</strong>
+  (placeholder WiFi, publicly documented API key). To bake in your own credentials,
+  build from source &mdash; see the <a href="https://github.com/cosmicboy6/esp32-s3-hp1010-printserver#readme">README</a>.
+</div>
+
+<p class="muted" style="margin-top:3rem">
+  <a href="https://github.com/cosmicboy6/esp32-s3-hp1010-printserver">Source on GitHub</a>
+</p>
+
+</body>
+</html>

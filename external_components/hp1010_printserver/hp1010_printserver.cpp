@@ -71,6 +71,10 @@ void HP1010PrintServer::dump_config() {
     ESP_LOGCONFIG(TAG, "  Bulk OUT: 0x%02X (MPS %u)", this->ep_out_.load(), this->ep_out_mps_);
     if (this->ep_in_.load() != 0)
       ESP_LOGCONFIG(TAG, "  Bulk IN: 0x%02X", this->ep_in_.load());
+    if (this->has_status())
+      ESP_LOGCONFIG(TAG, "  Port status: 0x%02X (PaperEmpty=%u Select=%u NotError=%u)", this->printer_status(),
+                    (this->printer_status() >> 5) & 0x01, (this->printer_status() >> 4) & 0x01,
+                    (this->printer_status() >> 3) & 0x01);
   } else {
     ESP_LOGCONFIG(TAG, "  Printer: not connected");
   }
@@ -177,6 +181,8 @@ void HP1010PrintServer::printer_class_port_status_() {
         // The reply buffer starts with the 8-byte setup packet, then the data.
         if (result.success && result.data_len > usb_host::SETUP_PACKET_SIZE) {
           const uint8_t s = result.data[usb_host::SETUP_PACKET_SIZE];
+          this->printer_status_.store(s, std::memory_order_release);
+          this->has_status_.store(true, std::memory_order_release);
           ESP_LOGD(TAG, "Printer port status 0x%02X (PaperEmpty=%u Select=%u NotError=%u)", s, (s >> 5) & 0x01,
                    (s >> 4) & 0x01, (s >> 3) & 0x01);
         } else {
@@ -240,11 +246,19 @@ void HP1010PrintServer::on_connected() {
     if (this->is_ready())
       this->start_input_();
   });
+
+  // Read the printer's status soon after connecting (the interval handler only
+  // fires every 15 s). Delayed so it cannot race the SET_INTERFACE above.
+  this->set_timeout("printer_status_first", 2000, [this]() {
+    if (this->is_ready())
+      this->printer_class_port_status_();
+  });
 }
 
 void HP1010PrintServer::on_disconnected() {
   this->printer_ready_.store(false, std::memory_order_release);
   this->status_inflight_.store(false, std::memory_order_release);
+  this->has_status_.store(false, std::memory_order_release);
   this->generation_.fetch_add(1, std::memory_order_acq_rel);
 
   // The TCP task notices the generation change on its next recv() timeout or

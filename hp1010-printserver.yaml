@@ -71,3 +71,22 @@ binary_sensor:
   - platform: template
     name: "HP1010 Printer Ready"
     lambda: 'return id(prn).is_ready();'
+  - platform: template
+    name: "HP1010 Paper Out"
+    device_class: problem
+    lambda: 'return id(prn).is_paper_empty();'
+  - platform: template
+    name: "HP1010 Error"
+    device_class: problem
+    lambda: 'return id(prn).is_error();'
+  - platform: template
+    name: "HP1010 Online"
+    lambda: 'return id(prn).is_online();'
+
+sensor:
+  - platform: template
+    name: "HP1010 Raw Status"
+    entity_category: diagnostic
+    accuracy_decimals: 0
+    update_interval: 5s
+    lambda: 'return id(prn).has_status() ? (float) id(prn).printer_status() : NAN;'

@@ -36,6 +36,17 @@ class HP1010PrintServer : public usb_host::USBClient {
   /// True while the printer is enumerated, claimed, and selected for raw data.
   bool is_ready() const { return this->printer_ready_.load(std::memory_order_acquire); }
 
+  /// Last IEEE-1284 status byte reported by the printer (0 until the first read).
+  uint8_t printer_status() const { return this->printer_status_.load(std::memory_order_acquire); }
+  /// True once a status byte has been read since the printer last connected.
+  bool has_status() const { return this->has_status_.load(std::memory_order_acquire); }
+  /// Out of paper (status bit 5 "PaperEmpty").
+  bool is_paper_empty() const { return this->is_ready() && (this->printer_status() & STATUS_PAPER_EMPTY) != 0; }
+  /// Error / needs attention (status bit 3 "NotError" is clear).
+  bool is_error() const { return this->is_ready() && (this->printer_status() & STATUS_NOT_ERROR) == 0; }
+  /// Selected / online (status bit 4 "Select").
+  bool is_online() const { return this->is_ready() && (this->printer_status() & STATUS_SELECT) != 0; }
+
  protected:
   void on_connected() override;
   void on_disconnected() override;
@@ -48,6 +59,11 @@ class HP1010PrintServer : public usb_host::USBClient {
   static constexpr size_t CHUNK_SIZE = 4096;
   static constexpr size_t CHUNK_COUNT = 8;
   static constexpr size_t MAX_INFLIGHT = 1;
+
+  // IEEE-1284 status-byte bits reported by the printer's GET_PORT_STATUS.
+  static constexpr uint8_t STATUS_PAPER_EMPTY = 0x20;  // bit 5
+  static constexpr uint8_t STATUS_SELECT = 0x10;       // bit 4
+  static constexpr uint8_t STATUS_NOT_ERROR = 0x08;    // bit 3 (1 = no error)
 
   struct Chunk {
     uint8_t data[CHUNK_SIZE];
@@ -78,6 +94,8 @@ class HP1010PrintServer : public usb_host::USBClient {
   std::atomic<bool> claimed_{false};
   std::atomic<bool> printer_ready_{false};
   std::atomic<bool> status_inflight_{false};
+  std::atomic<uint8_t> printer_status_{0};
+  std::atomic<bool> has_status_{false};
   std::atomic<size_t> inflight_{0};
   std::atomic<uint32_t> generation_{0};
   std::atomic<uint32_t> out_bytes_{0};
