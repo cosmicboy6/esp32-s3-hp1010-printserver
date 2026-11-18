@@ -183,12 +183,12 @@ ESPHome prefixes every entity with the device name, so the IDs are
 - Inspired by [`mckinlk/esp32-zp450-print-server`](https://github.com/mckinlk/esp32-zp450-print-server)
   (4 KiB transfers, one at a time).
 - Firmware, Home Assistant app and documentation built with
-  **[OpenCode](https://opencode.ai)** — the open-source coding agent.
-  Docker images are published as `ghcr.io/anomalyco/opencode:<version>`:
+  **[OpenCode](https://opencode.ai)**, running in the
+  [`sprisa/opencode`](https://hub.docker.com/r/sprisa/opencode) Docker image
+  (source: [`sprisa/opencode-server`](https://github.com/sprisa/opencode-server)):
 
   ```sh
-  docker pull ghcr.io/anomalyco/opencode:latest
+  docker pull sprisa/opencode:latest
   ```
 
-  Download / Docker docs: <https://opencode.ai/docs/#docker>
 - Built by **Big Pickle GO** 🥒
