@@ -1,5 +1,7 @@
 # HP LaserJet 1010 → ESP32-S3 Network Print Server
 
+[![Sponsor this project](https://img.shields.io/badge/Sponsor%20this%20project-FFDD00?style=flat-square&logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/hanshauberger)
+
 Turn a **host-based HP LaserJet 1010** (USB-only, no network port) into a
 network printer using an **ESP32-S3** as a transparent
 **raw TCP-9100 (JetDirect / AppSocket) → USB Printer Class** bridge.
